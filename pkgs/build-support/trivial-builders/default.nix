@@ -1,4 +1,4 @@
-{ lib, stdenv, stdenvNoCC, lndir, runtimeShell, shellcheck-minimal }:
+{ lib, stdenv, stdenvNoCC, lndir, runtimeShell, shellcheck-minimal, makeWrapper }:
 
 let
   inherit (lib)
@@ -276,7 +276,7 @@ rec {
       meta ? { },
       /*
          The `checkPhase` to run. Defaults to `shellcheck` on supported
-         platforms and `${bash} -n`.
+         platforms and `bash -n`.
 
          The script path will be given as `$target` in the `checkPhase`.
 
@@ -310,8 +310,12 @@ rec {
        */
       derivationArgs ? { },
     }:
+    let pathMessage = "writeShellApplication: only one of runtimeEnv.PATH or runtimeInputs may be set";
+    in
+    assert lib.assertMsg (runtimeEnv ? PATH -> runtimeInputs == []) pathMessage;
+    assert lib.assertMsg (runtimeInputs != [] -> ! runtimeEnv ? PATH) pathMessage;
     writeTextFile {
-      inherit name meta derivationArgs;
+      inherit name meta;
       executable = true;
       destination = "/bin/${name}";
       allowSubstitutes = true;
@@ -354,6 +358,23 @@ rec {
           runHook postCheck
         ''
         else checkPhase;
+
+        derivationArgs = derivationArgs // {
+          postCheck = ''
+            wrapProgram "$target" \
+              --prefix PATH : ${lib.escapeShellArg (lib.makeBinPath runtimeInputs)} \
+              ${lib.optionalString (runtimeEnv != null)
+                (lib.concatStringsSep " \\\n  "
+                  (lib.mapAttrsToList
+                    (name: value:
+                      "--set ${lib.escapeShellArg name} ${lib.escapeShellArg value}")
+                    runtimeEnv))
+              }
+            ${derivationArgs.postCheck or ""}
+          '';
+
+          nativeBuildInputs = (derivationArgs.nativeBuildInputs or []) ++ [ makeWrapper ];
+        };
     };
 
   # Create a C binary
