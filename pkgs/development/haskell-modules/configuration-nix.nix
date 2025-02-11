@@ -1503,6 +1503,27 @@ self: super: builtins.intersectAttrs super {
     (if pkgs.stdenv.hostPlatform.isStatic then pkgs.postgresql_16 else pkgs.libpq)
     super.postgresql-libpq-pkgconfig;
 
+  postgresql-libpq_0_11_0_0 =
+    (overrideCabal (drv: {
+      # Using use-pkg-config flag, because pg_config won't work when cross-compiling.
+      configureFlags = drv.configureFlags or [ ] ++ [ "-fuse-pkg-config" ];
+
+      libraryHaskellDepends = drv.libraryHaskellDepends or [] ++ [
+        self.postgresql-libpq-pkgconfig
+      ];
+    }) super.postgresql-libpq_0_11_0_0).overrideScope (cself: csuper:
+      {
+        tasty = cself.tasty_1_5_2;
+        # Not needed with `-fuse-pkg-config`.
+        postgresql-libpq-configure = null;
+      });
+
+  postgresql-libpq-pkgconfig = overrideCabal (drv: {
+    libraryPkgconfigDepends = (drv.libraryPkgconfigDepends or [ ]) ++ [
+      pkgs.postgresql.dev
+    ];
+  }) super.postgresql-libpq-pkgconfig;
+
   # Test failure is related to a GHC implementation detail of primitives and doesn't
   # cause actual problems in dependent packages, see https://github.com/lehins/pvar/issues/4
   pvar = dontCheck super.pvar;
