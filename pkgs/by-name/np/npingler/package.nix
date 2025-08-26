@@ -25,12 +25,19 @@ rustPlatform.buildRustPackage {
 
   cargoHash = "sha256-VhMpgrNy0NauwBSCR+5vjod9H216HPC+rdQUIFVjnRg=";
 
+  buildFeatures = [ "clap_mangen" ];
 
   nativeBuildInputs = [
     installShellFiles
   ];
 
   postInstall = lib.optionalString emulatorAvailable ''
+    manpages=$(mktemp -d)
+    ${emulator} $out/bin/npingler util generate-man-pages "$manpages"
+    for manpage in "$manpages"/*; do
+      installManPage "$manpage"
+    done
+
     installShellCompletion --cmd npingler \
       --bash <(${emulator} $out/bin/npingler util generate-completions bash) \
       --fish <(${emulator} $out/bin/npingler util generate-completions fish) \
